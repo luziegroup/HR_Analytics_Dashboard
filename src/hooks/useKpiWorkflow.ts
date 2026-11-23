@@ -1,80 +1,50 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { User } from 'firebase/auth';
-import { findMemberByEmail, isLeaderEmail } from '@/config/team';
-import { signInBasic, logout, subscribeAuthUser } from '@/services/googleAuth';
+import { TEAM_MEMBERS, WORKFLOW_USERS } from '@/config/team';
 import {
+  clearMonth,
   decideSubmission,
+  getSessionUserId,
+  loadAllSubmissions,
   saveSubmission,
+  setSessionUserId,
   subscribeSubmissions,
-} from '@/services/submissionService';
-import type { KpiSubmission, TeamMember } from '@/types/submission';
+} from '@/services/submissionStore';
+import type { KpiSubmission } from '@/types/submission';
 
 export function useKpiWorkflow(monthKey: string) {
-  const [user, setUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [authError, setAuthError] = useState<string | null>(null);
-  const [submissions, setSubmissions] = useState<KpiSubmission[]>([]);
-  const [dataError, setDataError] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(() => getSessionUserId());
+  const [all, setAll] = useState<KpiSubmission[]>(() => loadAllSubmissions());
 
-  useEffect(() => {
-    return subscribeAuthUser((u) => {
-      setUser(u);
-      setAuthLoading(false);
-    });
+  useEffect(() => subscribeSubmissions(() => setAll(loadAllSubmissions())), []);
+
+  const currentUser = WORKFLOW_USERS.find((u) => u.id === userId) ?? null;
+  const isLeader = currentUser?.isLeader ?? false;
+  const member = TEAM_MEMBERS.find((m) => m.id === currentUser?.id);
+
+  const submissions = useMemo(
+    () =>
+      all.filter(
+        (s) => s.monthKey === monthKey && (isLeader || s.employeeId === currentUser?.id),
+      ),
+    [all, monthKey, isLeader, currentUser?.id],
+  );
+
+  const selectUser = useCallback((id: string | null) => {
+    setSessionUserId(id);
+    setUserId(id);
   }, []);
-
-  const email = user?.email?.toLowerCase() ?? null;
-  const member: TeamMember | undefined = useMemo(() => findMemberByEmail(email), [email]);
-  const isLeader = isLeaderEmail(email);
-
-  useEffect(() => {
-    setSubmissions([]);
-    setDataError(null);
-    if (!email || (!isLeader && !member)) return;
-    return subscribeSubmissions(
-      monthKey,
-      isLeader ? null : email,
-      setSubmissions,
-      (m) =>
-        setDataError(
-          `${m} Pastikan Firestore sudah aktif dan aturan keamanan (firestore.rules) sudah dipasang.`,
-        ),
-    );
-  }, [monthKey, email, isLeader, member]);
-
-  const signIn = useCallback(async () => {
-    setAuthError(null);
-    try {
-      await signInBasic();
-    } catch (e) {
-      setAuthError(e instanceof Error ? e.message : 'Gagal masuk dengan Google.');
-    }
-  }, []);
-
-  const signOut = useCallback(() => logout(), []);
 
   const save = useCallback((sub: KpiSubmission) => saveSubmission(sub), []);
 
   const decide = useCallback(
-    (sub: KpiSubmission, decision: 'Validated' | 'Rejected', note: string) => {
-      if (!email) return Promise.reject(new Error('Belum masuk.'));
-      return decideSubmission(sub, decision, email, note);
+    (sub: KpiSubmission, decision: 'Validated' | 'Rejected', note: string, score: number) => {
+      if (!currentUser?.isLeader) return;
+      decideSubmission(sub, decision, currentUser.name, note, score);
     },
-    [email],
+    [currentUser],
   );
 
-  return {
-    user,
-    email,
-    member,
-    isLeader,
-    authLoading,
-    authError,
-    signIn,
-    signOut,
-    submissions,
-    dataError,
-    save,
-    decide,
-  };
+  const resetMonth = useCallback(() => clearMonth(monthKey), [monthKey]);
+
+  return { currentUser, isLeader, member, selectUser, submissions, save, decide, resetMonth };
 }

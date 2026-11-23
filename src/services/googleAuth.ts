@@ -1,22 +1,31 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, type FirebaseApp } from 'firebase/app';
 import {
   getAuth,
   GoogleAuthProvider,
   onAuthStateChanged,
   signInWithPopup,
+  type Auth,
   type User,
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 export const SCOPES = ['https://www.googleapis.com/auth/drive.readonly'] as const;
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-export { app, auth };
+/** Firebase hanya dipakai untuk konektor Google Drive. Bila konfigurasi kosong, fitur itu nonaktif. */
+export const isFirebaseConfigured = Boolean(firebaseConfig.apiKey && firebaseConfig.projectId);
+const NOT_CONFIGURED_MESSAGE =
+  'Google Drive belum dikonfigurasi. Isi firebase-applet-config.json untuk mengaktifkannya.';
 
-const provider = new GoogleAuthProvider();
-for (const scope of SCOPES) {
-  provider.addScope(scope);
+let app: FirebaseApp | null = null;
+let auth: Auth | null = null;
+
+function getFirebaseAuth(): Auth | null {
+  if (!isFirebaseConfigured) return null;
+  if (!app) {
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+  }
+  return auth;
 }
 
 let isSigningIn = false;
@@ -27,7 +36,12 @@ export const initAuth = (
   onAuthSuccess?: (user: User, token: string) => void,
   onAuthFailure?: () => void,
 ) => {
-  return onAuthStateChanged(auth, (user: User | null) => {
+  const a = getFirebaseAuth();
+  if (!a) {
+    onAuthFailure?.();
+    return () => undefined;
+  }
+  return onAuthStateChanged(a, (user: User | null) => {
     if (user) {
       if (cachedAccessToken) {
         onAuthSuccess?.(user, cachedAccessToken);
@@ -46,9 +60,13 @@ export const googleSignIn = async (): Promise<{
   user: User;
   accessToken: string;
 }> => {
+  const a = getFirebaseAuth();
+  if (!a) throw new Error(NOT_CONFIGURED_MESSAGE);
+  const provider = new GoogleAuthProvider();
+  for (const scope of SCOPES) provider.addScope(scope);
   try {
     isSigningIn = true;
-    const result = await signInWithPopup(auth, provider);
+    const result = await signInWithPopup(a, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (!credential?.accessToken) {
       throw new Error('Gagal memperoleh token akses Google Drive.');
@@ -69,15 +87,7 @@ export const clearAccessToken = () => {
 };
 
 export const logout = async (): Promise<void> => {
-  await auth.signOut();
+  const a = getFirebaseAuth();
+  if (a) await a.signOut();
   cachedAccessToken = null;
 };
-
-// Login dasar (tanpa akses Drive) untuk fitur isi KPI mandiri dan validasi leader.
-const basicProvider = new GoogleAuthProvider();
-export const signInBasic = async (): Promise<User> => {
-  const result = await signInWithPopup(auth, basicProvider);
-  return result.user;
-};
-export const subscribeAuthUser = (callback: (user: User | null) => void) =>
-  onAuthStateChanged(auth, callback);

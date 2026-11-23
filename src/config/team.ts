@@ -1,42 +1,30 @@
-import type { TeamMember } from '@/types/submission';
+import type { TeamMember, WorkflowUser } from '@/types/submission';
 
-/**
- * ISI EMAIL GOOGLE ASLI sebelum dipakai. Email harus sama persis dengan akun Google
- * yang dipakai untuk login. Daftar ini juga harus disalin ke firestore.rules.
- */
 export const TEAM_MEMBERS: TeamMember[] = [
-  { id: 'adhit', name: 'Adhit', role: 'Project & Operasional Umroh', email: 'adhit@contoh.com' },
-  { id: 'fathur', name: 'Fathur', role: 'Marketing & Sales', email: 'fathur@contoh.com' },
-  { id: 'amud', name: 'Amud', role: 'Admin & Dokumen', email: 'amud@contoh.com' },
-  { id: 'mas-agus', name: 'Mas Agus', role: 'Lapangan & Logistik (External)', email: 'agus@contoh.com' },
+  { id: 'adhit', name: 'Adhit', role: 'Project & Operasional Umroh' },
+  { id: 'fathur', name: 'Fathur', role: 'Marketing & Sales' },
+  { id: 'amud', name: 'Amud', role: 'Admin & Dokumen' },
+  { id: 'mas-agus', name: 'Mas Agus', role: 'Lapangan & Logistik (External)' },
 ];
 
-/** Leader yang boleh memvalidasi. Leader tidak bisa memvalidasi KPI miliknya sendiri. */
-export const LEADER_EMAILS: string[] = ['leader@contoh.com'];
+/** Ubah nama leader sesuai kebutuhan. Leader tidak punya KPI sendiri di aplikasi ini. */
+export const LEADER: WorkflowUser = { id: 'leader', name: 'Leader', isLeader: true };
 
-/** Bulan penilaian yang tersedia di pilihan bulan. */
+export const WORKFLOW_USERS: WorkflowUser[] = [
+  ...TEAM_MEMBERS.map((m) => ({ id: m.id, name: m.name, isLeader: false })),
+  LEADER,
+];
+
 export const MONTHS: { key: string; label: string }[] = [
   { key: '2026-10', label: 'Okt 2026' },
   { key: '2026-11', label: 'Nov 2026' },
   { key: '2026-12', label: 'Des 2026' },
 ];
 
-/** Batas skor maksimum per KPI (sama dengan Excel: 120%). */
-export const SCORE_CAP = 1.2;
+/** Skor per KPI paling tinggi 120% (sama dengan Excel). */
+export const SCORE_CAP_PCT = 120;
 
 export function defaultMonthKey(now = new Date()): string {
   const key = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   return MONTHS.some((m) => m.key === key) ? key : MONTHS[0].key;
-}
-
-export function findMemberByEmail(email: string | null | undefined): TeamMember | undefined {
-  if (!email) return undefined;
-  const e = email.toLowerCase();
-  return TEAM_MEMBERS.find((m) => m.email.toLowerCase() === e);
-}
-
-export function isLeaderEmail(email: string | null | undefined): boolean {
-  if (!email) return false;
-  const e = email.toLowerCase();
-  return LEADER_EMAILS.some((l) => l.toLowerCase() === e);
 }

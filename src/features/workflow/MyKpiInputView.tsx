@@ -1,97 +1,77 @@
 import { useEffect, useState } from 'react';
 import { SectionCard } from '@/components/ui/SectionCard';
 import { KPI_DEFINITIONS } from '@/config/kpiDefinitions';
-import { MONTHS } from '@/config/team';
-import { submissionId } from '@/services/submissionService';
+import { MONTHS, SCORE_CAP_PCT } from '@/config/team';
+import { submissionId } from '@/services/submissionStore';
 import type { KpiDefinition, KpiSubmission, TeamMember } from '@/types/submission';
 import {
   categoryForScore,
   isValidEvidenceUrl,
-  realisasiRatio,
   scoreEmployeeMonth,
 } from '@/utils/kpiSubmissionScoring';
 import { StatusBadge } from './StatusBadge';
 
 interface Props {
   member: TeamMember;
-  email: string;
   monthKey: string;
   submissions: KpiSubmission[];
-  onSave: (sub: KpiSubmission) => Promise<void>;
+  onSave: (sub: KpiSubmission) => void;
 }
 
 const inputCls =
   'w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm disabled:bg-slate-50 disabled:text-slate-500';
 
-function parseNumber(v: string): number {
-  return Number(v.replace(',', '.'));
-}
-
 function KpiRow({
   def,
   sub,
   member,
-  email,
   monthKey,
   onSave,
 }: {
   def: KpiDefinition;
   sub?: KpiSubmission;
   member: TeamMember;
-  email: string;
   monthKey: string;
-  onSave: (sub: KpiSubmission) => Promise<void>;
+  onSave: (sub: KpiSubmission) => void;
 }) {
-  const [target, setTarget] = useState(sub ? String(sub.target) : '');
-  const [actual, setActual] = useState(sub ? String(sub.actual) : '');
+  const [score, setScore] = useState(sub ? String(sub.claimedScore) : '');
   const [url, setUrl] = useState(sub?.evidenceUrl ?? '');
   const [note, setNote] = useState(sub?.note ?? '');
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setTarget(sub ? String(sub.target) : '');
-    setActual(sub ? String(sub.actual) : '');
+    setScore(sub ? String(sub.claimedScore) : '');
     setUrl(sub?.evidenceUrl ?? '');
     setNote(sub?.note ?? '');
   }, [sub?.updatedAt, sub?.status]);
 
   const locked = sub?.status === 'Submitted' || sub?.status === 'Validated';
-  const t = parseNumber(target);
-  const a = parseNumber(actual);
-  const ratio = target !== '' && actual !== '' ? realisasiRatio(t, a) : null;
 
-  const persist = async (status: 'Draft' | 'Submitted') => {
+  const persist = (status: 'Draft' | 'Submitted') => {
     setError(null);
+    const n = Number(score.replace(',', '.'));
     if (status === 'Submitted') {
-      if (!(t > 0)) return setError('Isi target lebih dari 0.');
-      if (!(a >= 0) || actual === '') return setError('Isi jumlah tercapai (0 atau lebih).');
-      if (!isValidEvidenceUrl(url)) return setError('Link bukti wajib diisi (diawali https://).');
+      if (score.trim() === '' || !Number.isFinite(n) || n < 0 || n > SCORE_CAP_PCT) {
+        return setError(`Isi skor akhir antara 0 dan ${SCORE_CAP_PCT}.`);
+      }
+      if (!isValidEvidenceUrl(url)) {
+        return setError('Link file KPI pendukung wajib diisi (diawali https://).');
+      }
     }
     const now = new Date().toISOString();
-    const next: KpiSubmission = {
+    onSave({
       id: submissionId(monthKey, def.id),
       kpiId: def.id,
       employeeId: member.id,
-      ownerEmail: email,
       monthKey,
-      target: Number.isFinite(t) ? t : 0,
-      actual: Number.isFinite(a) ? a : 0,
+      claimedScore: Number.isFinite(n) ? n : 0,
       evidenceUrl: url.trim(),
       note: note.trim(),
       status,
       updatedAt: now,
       submittedAt: status === 'Submitted' ? now : sub?.submittedAt,
       leaderNote: sub?.status === 'Rejected' ? sub.leaderNote : undefined,
-    };
-    setBusy(true);
-    try {
-      await onSave(next);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Gagal menyimpan.');
-    } finally {
-      setBusy(false);
-    }
+    });
   };
 
   return (
@@ -107,11 +87,11 @@ function KpiRow({
       </div>
 
       <details className="text-xs text-slate-600">
-        <summary className="cursor-pointer text-blue-700">Apa arti terlaksana sempurna (100%)?</summary>
+        <summary className="cursor-pointer text-blue-700">Apa yang harus ada di file KPI pendukung?</summary>
         <div className="mt-2 space-y-1 bg-slate-50 rounded-lg p-3">
           <p><span className="font-medium">100% bila:</span> {def.perfect}</p>
-          <p><span className="font-medium">Cara hitung:</span> {def.method}</p>
-          <p><span className="font-medium">Bukti:</span> {def.evidence}</p>
+          <p><span className="font-medium">Cara menghitung skor:</span> {def.method}</p>
+          <p><span className="font-medium">File bukti:</span> {def.evidence}</p>
           <p><span className="font-medium">Contoh:</span> {def.example}</p>
         </div>
       </details>
@@ -124,23 +104,12 @@ function KpiRow({
 
       <div className="grid gap-3 sm:grid-cols-4">
         <label className="text-xs text-slate-600">
-          Target ({def.unit})
-          <input className={inputCls} inputMode="decimal" value={target} disabled={locked}
-            onChange={(e) => setTarget(e.target.value)} />
+          Skor akhir (%)
+          <input className={inputCls} inputMode="decimal" placeholder="contoh: 90" value={score}
+            disabled={locked} onChange={(e) => setScore(e.target.value)} />
         </label>
-        <label className="text-xs text-slate-600">
-          Tercapai ({def.unit})
-          <input className={inputCls} inputMode="decimal" value={actual} disabled={locked}
-            onChange={(e) => setActual(e.target.value)} />
-        </label>
-        <div className="text-xs text-slate-600">
-          Realisasi
-          <p className="mt-1.5 text-base font-semibold text-slate-900 tabular-nums">
-            {ratio === null ? '-' : `${(ratio * 100).toFixed(1)}%`}
-          </p>
-        </div>
-        <label className="text-xs text-slate-600 sm:col-span-4">
-          Link bukti (Drive, folder, atau tautan file)
+        <label className="text-xs text-slate-600 sm:col-span-3">
+          Link file KPI pendukung
           <input className={inputCls} placeholder="https://drive.google.com/..." value={url}
             disabled={locked} onChange={(e) => setUrl(e.target.value)} />
         </label>
@@ -155,27 +124,28 @@ function KpiRow({
 
       {!locked && (
         <div className="flex gap-2">
-          <button type="button" disabled={busy} onClick={() => persist('Draft')}
-            className="px-3 py-1.5 text-sm rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 cursor-pointer disabled:opacity-50">
+          <button type="button" onClick={() => persist('Draft')}
+            className="px-3 py-1.5 text-sm rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 cursor-pointer">
             Simpan draf
           </button>
-          <button type="button" disabled={busy} onClick={() => persist('Submitted')}
-            className="px-3 py-1.5 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 cursor-pointer disabled:opacity-50">
+          <button type="button" onClick={() => persist('Submitted')}
+            className="px-3 py-1.5 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 cursor-pointer">
             Kirim ke leader
           </button>
         </div>
       )}
       {sub?.status === 'Validated' && (
         <p className="text-xs text-emerald-700">
-          Divalidasi oleh {sub.validatedBy}
-          {sub.leaderNote ? `: ${sub.leaderNote}` : ''}
+          Divalidasi {sub.validatedBy}: skor {sub.validatedScore}%
+          {sub.validatedScore !== sub.claimedScore ? ` (dikoreksi dari ${sub.claimedScore}%)` : ''}
+          {sub.leaderNote ? `. ${sub.leaderNote}` : ''}
         </p>
       )}
     </div>
   );
 }
 
-export function MyKpiInputView({ member, email, monthKey, submissions, onSave }: Props) {
+export function MyKpiInputView({ member, monthKey, submissions, onSave }: Props) {
   const defs = KPI_DEFINITIONS.filter((d) => d.employeeId === member.id);
   const byKpi = new Map(submissions.map((s) => [s.kpiId, s]));
   const score = scoreEmployeeMonth(member.id, submissions);
@@ -191,7 +161,9 @@ export function MyKpiInputView({ member, email, monthKey, submissions, onSave }:
           <div>
             <p className="text-xs text-slate-500">Nilai tervalidasi</p>
             <p className="text-2xl font-semibold tabular-nums">{(score.validatedScore * 100).toFixed(1)}%</p>
-            <p className="text-xs text-slate-500">{categoryForScore(score.validatedScore)}</p>
+            <p className="text-xs text-slate-500">
+              {score.validatedCount === 0 ? 'Belum ada' : categoryForScore(score.validatedScore)}
+            </p>
           </div>
           <div>
             <p className="text-xs text-slate-500">Jika semua kiriman disetujui</p>
@@ -210,7 +182,7 @@ export function MyKpiInputView({ member, email, monthKey, submissions, onSave }:
 
       {defs.map((def) => (
         <KpiRow key={`${monthKey}-${def.id}`} def={def} sub={byKpi.get(def.id)} member={member}
-          email={email} monthKey={monthKey} onSave={onSave} />
+          monthKey={monthKey} onSave={onSave} />
       ))}
     </div>
   );

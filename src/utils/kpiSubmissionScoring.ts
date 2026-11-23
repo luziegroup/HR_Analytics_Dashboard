@@ -1,23 +1,22 @@
 import { KPI_DEFINITIONS } from '@/config/kpiDefinitions';
-import { SCORE_CAP } from '@/config/team';
+import { SCORE_CAP_PCT } from '@/config/team';
 import type { KpiSubmission } from '@/types/submission';
-
-export function realisasiRatio(target: number, actual: number): number | null {
-  if (!Number.isFinite(target) || !Number.isFinite(actual) || target <= 0 || actual < 0) return null;
-  return actual / target;
-}
 
 export interface EmployeeMonthScore {
   employeeId: string;
   totalWeight: number;
-  /** Nilai KPI dari submission yang sudah divalidasi saja (0 - 1.2). */
+  /** Nilai KPI (0 - 1.2) dari kiriman yang sudah divalidasi saja. */
   validatedScore: number;
-  /** Nilai bila semua kiriman yang menunggu validasi juga disetujui. */
+  /** Nilai bila semua kiriman yang menunggu validasi disetujui apa adanya. */
   projectedScore: number;
   kpiCount: number;
   validatedCount: number;
   submittedCount: number;
   rejectedCount: number;
+}
+
+function cappedFraction(pct: number): number {
+  return Math.min(Math.max(pct, 0), SCORE_CAP_PCT) / 100;
 }
 
 export function scoreEmployeeMonth(
@@ -26,39 +25,33 @@ export function scoreEmployeeMonth(
 ): EmployeeMonthScore {
   const defs = KPI_DEFINITIONS.filter((d) => d.employeeId === employeeId);
   const byKpi = new Map(submissions.map((s) => [s.kpiId, s]));
-  let validatedScore = 0;
-  let projectedScore = 0;
-  let validatedCount = 0;
-  let submittedCount = 0;
-  let rejectedCount = 0;
+  const result: EmployeeMonthScore = {
+    employeeId,
+    totalWeight: defs.reduce((s, d) => s + d.weight, 0),
+    validatedScore: 0,
+    projectedScore: 0,
+    kpiCount: defs.length,
+    validatedCount: 0,
+    submittedCount: 0,
+    rejectedCount: 0,
+  };
 
   for (const def of defs) {
     const sub = byKpi.get(def.id);
     if (!sub) continue;
-    const ratio = realisasiRatio(sub.target, sub.actual);
-    const capped = ratio === null ? 0 : Math.min(ratio, SCORE_CAP);
     if (sub.status === 'Validated') {
-      validatedScore += def.weight * capped;
-      projectedScore += def.weight * capped;
-      validatedCount++;
+      const v = def.weight * cappedFraction(sub.validatedScore ?? sub.claimedScore);
+      result.validatedScore += v;
+      result.projectedScore += v;
+      result.validatedCount++;
     } else if (sub.status === 'Submitted') {
-      projectedScore += def.weight * capped;
-      submittedCount++;
+      result.projectedScore += def.weight * cappedFraction(sub.claimedScore);
+      result.submittedCount++;
     } else if (sub.status === 'Rejected') {
-      rejectedCount++;
+      result.rejectedCount++;
     }
   }
-
-  return {
-    employeeId,
-    totalWeight: defs.reduce((s, d) => s + d.weight, 0),
-    validatedScore,
-    projectedScore,
-    kpiCount: defs.length,
-    validatedCount,
-    submittedCount,
-    rejectedCount,
-  };
+  return result;
 }
 
 export function categoryForScore(score: number): string {
@@ -75,4 +68,17 @@ export function isValidEvidenceUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+export function downloadCsv(filename: string, rows: (string | number)[][]): void {
+  const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+  const blob = new Blob(['\uFEFF' + rows.map((r) => r.map(esc).join(',')).join('\n')], {
+    type: 'text/csv;charset=utf-8',
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }

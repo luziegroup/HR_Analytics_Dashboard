@@ -38,19 +38,13 @@ src/
 
 ## Isi KPI Mandiri & Validasi Leader
 
-Menu **Input KPI Saya** dan **Validasi Leader** memakai Firebase Auth dan Firestore.
+Model: **skor akhir per KPI + file KPI pendukung**. Karyawan memilih nama, bulan, lalu mengisi satu angka
+*Skor akhir (%)* per KPI dan **link file KPI pendukung** (wajib). Leader membuka file, lalu **Setujui**,
+**koreksi skor** (alasan wajib), atau **Kembalikan** (alasan wajib). Nilai resmi hanya dari KPI berstatus *Tervalidasi*:
+`jumlah (bobot x min(skor, 120%))`. Leader bisa mengunduh rekap dan detail dalam CSV.
 
-Alur: karyawan login Google, memilih bulan, mengisi **Target**, **Tercapai**, dan **link bukti** untuk tiap KPI, lalu
-menekan *Kirim ke leader*. Leader membuka link bukti, lalu **Setujui** atau **Kembalikan** (alasan wajib). KPI yang
-dikembalikan bisa diperbaiki dan dikirim ulang. Nilai resmi hanya dihitung dari KPI berstatus *Tervalidasi*:
-`jumlah (bobot x min(tercapai / target, 120%))`.
+Tahap sekarang memakai penyimpanan **localStorage** (`src/services/submissionStore.ts`) dan pilihan nama sebagai
+pengganti login, jadi hanya untuk menyempurnakan sistem. Data belum dibagikan antar perangkat. Firebase hanya dipakai
+konektor Google Drive dan dibiarkan kosong (`firebase-applet-config.json`).
 
-### Setup (sekali)
-1. Firebase Console: aktifkan **Authentication > Google** dan tambahkan domain situs ke *Authorized domains*.
-2. Aktifkan **Firestore Database**.
-3. Isi email asli di `src/config/team.ts` (`TEAM_MEMBERS`, `LEADER_EMAILS`).
-4. Salin email yang sama ke `firestore.rules`, lalu publikasikan di Firestore > Rules.
-5. Definisi KPI, bobot, dan arti "terlaksana sempurna" ada di `src/config/kpiDefinitions.ts`.
-
-Aturan keamanan memastikan karyawan hanya melihat dan mengubah KPI miliknya, leader tidak bisa mengubah angka,
-dan leader tidak bisa memvalidasi KPI miliknya sendiri.
+Definisi KPI, bobot, dan arti "terlaksana sempurna" ada di `src/config/kpiDefinitions.ts`; tim dan leader di `src/config/team.ts`.
