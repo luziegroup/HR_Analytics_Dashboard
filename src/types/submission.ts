@@ -14,19 +14,18 @@ export interface KpiDefinition {
 }
 
 export interface KpiSubmission {
-  id: string; // `${monthKey}_${kpiId}`
-  kpiId: string;
+  id: string; // `${monthKey}_${employeeId}`
   employeeId: string;
   monthKey: string; // YYYY-MM
-  /** Skor akhir yang diisi karyawan, dalam persen (0 - 120). */
+  /** Nilai final gabungan semua KPI bulan itu, dalam persen (0 - 120), diisi karyawan. */
   claimedScore: number;
-  /** Link file KPI pendukung (Drive, spreadsheet, folder). */
+  /** Link file KPI rinci (Drive, spreadsheet, folder) sebagai bahan pengecekan leader. */
   evidenceUrl: string;
   note: string;
   status: SubmissionStatus;
   updatedAt: string;
   submittedAt?: string;
-  /** Skor setelah diperiksa leader. Bisa sama dengan claimedScore atau dikoreksi. */
+  /** Nilai final setelah diperiksa leader. Bisa sama dengan claimedScore atau dikoreksi. */
   validatedScore?: number;
   validatedBy?: string;
   validatedAt?: string;

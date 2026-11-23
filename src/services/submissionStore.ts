@@ -5,12 +5,12 @@ import type { KpiSubmission } from '@/types/submission';
  * Data hanya ada di browser ini. Antarmuka fungsi sengaja dibuat sederhana
  * agar nanti mudah diganti ke database bersama.
  */
-const STORAGE_KEY = 'kpi-submissions-v2';
+const STORAGE_KEY = 'kpi-submissions-v3';
 const SESSION_KEY = 'kpi-session-user';
 const listeners = new Set<() => void>();
 
-export function submissionId(monthKey: string, kpiId: string): string {
-  return `${monthKey}_${kpiId}`;
+export function submissionId(monthKey: string, employeeId: string): string {
+  return `${monthKey}_${employeeId}`;
 }
 
 export function loadAllSubmissions(): KpiSubmission[] {

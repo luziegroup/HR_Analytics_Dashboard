@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { SectionCard } from '@/components/ui/SectionCard';
-import { KPI_DEFINITIONS } from '@/config/kpiDefinitions';
 import { MONTHS, SCORE_CAP_PCT, TEAM_MEMBERS } from '@/config/team';
-import type { KpiSubmission } from '@/types/submission';
+import type { KpiSubmission, TeamMember } from '@/types/submission';
 import {
-  categoryForScore,
+  categoryForScorePct,
   downloadCsv,
-  scoreEmployeeMonth,
+  officialScorePct,
+  parseScore,
 } from '@/utils/kpiSubmissionScoring';
+import { KpiReferenceList } from './KpiReferenceList';
 import { StatusBadge } from './StatusBadge';
 
 interface Props {
@@ -21,67 +22,64 @@ interface Props {
   ) => void;
 }
 
-function ReviewCard({ sub, onDecide }: { sub: KpiSubmission; onDecide: Props['onDecide'] }) {
-  const def = KPI_DEFINITIONS.find((d) => d.id === sub.kpiId);
-  const member = TEAM_MEMBERS.find((m) => m.id === sub.employeeId);
+function ReviewCard({
+  sub,
+  member,
+  onDecide,
+}: {
+  sub: KpiSubmission;
+  member: TeamMember;
+  onDecide: Props['onDecide'];
+}) {
   const [score, setScore] = useState(String(sub.claimedScore));
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const decide = (decision: 'Validated' | 'Rejected') => {
     setError(null);
-    const n = Number(score.replace(',', '.'));
+    const n = parseScore(score);
     if (decision === 'Validated') {
-      if (!Number.isFinite(n) || n < 0 || n > SCORE_CAP_PCT) {
-        return setError(`Skor tervalidasi harus antara 0 dan ${SCORE_CAP_PCT}.`);
-      }
+      if (n === null) return setError(`Nilai tervalidasi harus antara 0 dan ${SCORE_CAP_PCT}.`);
       if (n !== sub.claimedScore && !note.trim()) {
-        return setError('Skor dikoreksi, isi alasan koreksi pada catatan.');
+        return setError('Nilai dikoreksi, isi alasan koreksi pada catatan.');
       }
+      return onDecide(sub, decision, note.trim(), n);
     }
-    if (decision === 'Rejected' && !note.trim()) {
-      return setError('Isi alasan saat mengembalikan.');
-    }
-    onDecide(sub, decision, note.trim(), n);
+    if (!note.trim()) return setError('Isi alasan saat mengembalikan.');
+    onDecide(sub, decision, note.trim(), sub.claimedScore);
   };
 
   return (
     <div className="border border-slate-200 rounded-xl p-4 space-y-3 bg-white">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="text-sm font-semibold text-slate-900">
-            {member?.name ?? sub.employeeId}: KPI {def?.no}. {def?.title ?? sub.kpiId}
-          </p>
-          <p className="text-xs text-slate-500">Bobot {def ? Math.round(def.weight * 100) : '-'}%</p>
+          <p className="text-sm font-semibold text-slate-900">{member.name}</p>
+          <p className="text-xs text-slate-500">{member.role}</p>
         </div>
         <StatusBadge status={sub.status} />
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3 text-sm">
         <div>
-          <p className="text-xs text-slate-500">Skor akhir dari karyawan</p>
-          <p className="text-lg font-semibold tabular-nums">{sub.claimedScore}%</p>
+          <p className="text-xs text-slate-500">Nilai final dari karyawan</p>
+          <p className="text-2xl font-semibold tabular-nums">{sub.claimedScore}%</p>
         </div>
         <div className="sm:col-span-2">
-          <p className="text-xs text-slate-500">File KPI pendukung</p>
+          <p className="text-xs text-slate-500">File KPI rinci (untuk dicek)</p>
           <a className="text-blue-700 underline break-all" href={sub.evidenceUrl} target="_blank" rel="noopener noreferrer">
             {sub.evidenceUrl}
           </a>
         </div>
       </div>
 
-      {def && (
-        <p className="text-xs text-slate-500">
-          100% bila: {def.perfect}. Cara hitung: {def.method}.
-        </p>
-      )}
       {sub.note && <p className="text-xs text-slate-600">Catatan karyawan: {sub.note}</p>}
+      <KpiReferenceList employeeId={member.id} title="Daftar KPI dan bobot sebagai panduan pengecekan" />
 
       {sub.status === 'Submitted' ? (
         <>
           <div className="grid gap-3 sm:grid-cols-4">
             <label className="text-xs text-slate-600">
-              Skor tervalidasi (%)
+              Nilai tervalidasi (%)
               <input className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm"
                 inputMode="decimal" value={score} onChange={(e) => setScore(e.target.value)} />
             </label>
@@ -106,7 +104,7 @@ function ReviewCard({ sub, onDecide }: { sub: KpiSubmission; onDecide: Props['on
       ) : (
         <p className="text-xs text-slate-500">
           {sub.status === 'Validated'
-            ? `Disetujui ${sub.validatedBy}: skor ${sub.validatedScore}%${
+            ? `Disetujui ${sub.validatedBy}: nilai ${sub.validatedScore}%${
                 sub.validatedScore !== sub.claimedScore ? ` (dikoreksi dari ${sub.claimedScore}%)` : ''
               }`
             : `Dikembalikan oleh ${sub.validatedBy}`}
@@ -120,78 +118,58 @@ function ReviewCard({ sub, onDecide }: { sub: KpiSubmission; onDecide: Props['on
 export function LeaderValidationView({ monthKey, submissions, onDecide }: Props) {
   const [filter, setFilter] = useState<'Submitted' | 'all'>('Submitted');
   const monthLabel = MONTHS.find((m) => m.key === monthKey)?.label ?? monthKey;
-  const shown = submissions
-    .filter((s) => (filter === 'all' ? s.status !== 'Draft' : s.status === 'Submitted'))
-    .sort((a, b) =>
-      (a.employeeId + a.kpiId).localeCompare(b.employeeId + b.kpiId, undefined, { numeric: true }),
-    );
+  const byEmployee = new Map(submissions.map((s) => [s.employeeId, s]));
   const pending = submissions.filter((s) => s.status === 'Submitted').length;
+  const shown = TEAM_MEMBERS.map((m) => ({ member: m, sub: byEmployee.get(m.id) })).filter(
+    (x): x is { member: TeamMember; sub: KpiSubmission } =>
+      !!x.sub && (filter === 'all' ? x.sub.status !== 'Draft' : x.sub.status === 'Submitted'),
+  );
 
-  const exportSummary = () =>
+  const exportCsv = () =>
     downloadCsv(`rekap-nilai-kpi-${monthKey}.csv`, [
-      ['Nama', 'Bulan', 'Nilai KPI (%)', 'Kategori', 'KPI tervalidasi', 'Total KPI'],
+      ['Nama', 'Bulan', 'Status', 'Nilai diisi (%)', 'Nilai tervalidasi (%)', 'Kategori', 'Link file KPI', 'Divalidasi oleh', 'Tanggal validasi', 'Catatan leader'],
       ...TEAM_MEMBERS.map((m) => {
-        const sc = scoreEmployeeMonth(m.id, submissions.filter((s) => s.employeeId === m.id));
+        const s = byEmployee.get(m.id);
+        const off = officialScorePct(s);
         return [
-          m.name,
-          monthLabel,
-          (sc.validatedScore * 100).toFixed(1),
-          sc.validatedCount === 0 ? 'Belum ada' : categoryForScore(sc.validatedScore),
-          sc.validatedCount,
-          sc.kpiCount,
-        ];
-      }),
-    ]);
-
-  const exportDetail = () =>
-    downloadCsv(`detail-kpi-${monthKey}.csv`, [
-      ['Nama', 'Bulan', 'KPI', 'Bobot (%)', 'Status', 'Skor diisi (%)', 'Skor tervalidasi (%)', 'Link bukti', 'Divalidasi oleh', 'Tanggal validasi', 'Catatan leader'],
-      ...KPI_DEFINITIONS.map((d) => {
-        const s = submissions.find((x) => x.kpiId === d.id);
-        const name = TEAM_MEMBERS.find((m) => m.id === d.employeeId)?.name ?? d.employeeId;
-        return [
-          name, monthLabel, `${d.no}. ${d.title}`, Math.round(d.weight * 100), s?.status ?? 'Belum diisi',
-          s?.claimedScore ?? '', s?.validatedScore ?? '', s?.evidenceUrl ?? '',
+          m.name, monthLabel, s?.status ?? 'Belum diisi', s?.claimedScore ?? '',
+          off ?? '', off === null ? '' : categoryForScorePct(off), s?.evidenceUrl ?? '',
           s?.validatedBy ?? '', s?.validatedAt?.slice(0, 10) ?? '', s?.leaderNote ?? '',
         ];
       }),
     ]);
 
-  const btn = 'px-3 py-1.5 text-sm rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 cursor-pointer';
-
   return (
     <div className="space-y-6">
       <SectionCard
-        title={`Rekap nilai KPI ${monthLabel} (tervalidasi)`}
-        subtitle="Poin akhir hanya dari KPI yang sudah disetujui leader."
+        title={`Rekap nilai final ${monthLabel}`}
+        subtitle="Nilai resmi hanya dari kiriman yang sudah divalidasi leader."
         action={
-          <div className="flex gap-2">
-            <button type="button" className={btn} onClick={exportSummary}>Unduh rekap (CSV)</button>
-            <button type="button" className={btn} onClick={exportDetail}>Unduh detail (CSV)</button>
-          </div>
+          <button type="button" onClick={exportCsv}
+            className="px-3 py-1.5 text-sm rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 cursor-pointer">
+            Unduh rekap (CSV)
+          </button>
         }
       >
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs text-slate-500 border-b border-slate-200">
-                <th className="py-2 pr-3">Nama</th><th className="pr-3">Nilai KPI</th><th className="pr-3">Kategori</th>
-                <th className="pr-3">Tervalidasi</th><th className="pr-3">Menunggu</th><th className="pr-3">Dikembalikan</th>
-                <th>Jika semua disetujui</th>
+                <th className="py-2 pr-3">Nama</th><th className="pr-3">Status</th><th className="pr-3">Nilai diisi</th>
+                <th className="pr-3">Nilai resmi</th><th>Kategori</th>
               </tr>
             </thead>
             <tbody>
               {TEAM_MEMBERS.map((m) => {
-                const sc = scoreEmployeeMonth(m.id, submissions.filter((s) => s.employeeId === m.id));
+                const s = byEmployee.get(m.id);
+                const off = officialScorePct(s);
                 return (
                   <tr key={m.id} className="border-b border-slate-100">
                     <td className="py-2 pr-3 font-medium">{m.name}</td>
-                    <td className="pr-3 tabular-nums">{(sc.validatedScore * 100).toFixed(1)}%</td>
-                    <td className="pr-3">{sc.validatedCount === 0 ? 'Belum ada' : categoryForScore(sc.validatedScore)}</td>
-                    <td className="pr-3 tabular-nums">{sc.validatedCount}/{sc.kpiCount}</td>
-                    <td className="pr-3 tabular-nums">{sc.submittedCount}</td>
-                    <td className="pr-3 tabular-nums">{sc.rejectedCount}</td>
-                    <td className="tabular-nums">{(sc.projectedScore * 100).toFixed(1)}%</td>
+                    <td className="pr-3"><StatusBadge status={s?.status} /></td>
+                    <td className="pr-3 tabular-nums">{s && s.status !== 'Draft' ? `${s.claimedScore}%` : '-'}</td>
+                    <td className="pr-3 tabular-nums font-semibold">{off === null ? '-' : `${off.toFixed(1)}%`}</td>
+                    <td>{off === null ? '-' : categoryForScorePct(off)}</td>
                   </tr>
                 );
               })}
@@ -212,8 +190,8 @@ export function LeaderValidationView({ monthKey, submissions, onDecide }: Props)
       >
         <div className="space-y-4">
           {shown.length === 0 && <p className="text-sm text-slate-500">Tidak ada kiriman untuk ditampilkan.</p>}
-          {shown.map((s) => (
-            <ReviewCard key={s.id + s.updatedAt} sub={s} onDecide={onDecide} />
+          {shown.map(({ member, sub }) => (
+            <ReviewCard key={sub.id + sub.updatedAt} sub={sub} member={member} onDecide={onDecide} />
           ))}
         </div>
       </SectionCard>

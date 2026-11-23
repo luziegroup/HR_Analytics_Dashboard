@@ -1,63 +1,17 @@
-import { KPI_DEFINITIONS } from '@/config/kpiDefinitions';
 import { SCORE_CAP_PCT } from '@/config/team';
 import type { KpiSubmission } from '@/types/submission';
 
-export interface EmployeeMonthScore {
-  employeeId: string;
-  totalWeight: number;
-  /** Nilai KPI (0 - 1.2) dari kiriman yang sudah divalidasi saja. */
-  validatedScore: number;
-  /** Nilai bila semua kiriman yang menunggu validasi disetujui apa adanya. */
-  projectedScore: number;
-  kpiCount: number;
-  validatedCount: number;
-  submittedCount: number;
-  rejectedCount: number;
+/** Nilai resmi (persen, dibatasi 0 - 120). Hanya ada jika sudah divalidasi leader. */
+export function officialScorePct(sub?: KpiSubmission): number | null {
+  if (!sub || sub.status !== 'Validated') return null;
+  const v = sub.validatedScore ?? sub.claimedScore;
+  return Math.min(Math.max(v, 0), SCORE_CAP_PCT);
 }
 
-function cappedFraction(pct: number): number {
-  return Math.min(Math.max(pct, 0), SCORE_CAP_PCT) / 100;
-}
-
-export function scoreEmployeeMonth(
-  employeeId: string,
-  submissions: KpiSubmission[],
-): EmployeeMonthScore {
-  const defs = KPI_DEFINITIONS.filter((d) => d.employeeId === employeeId);
-  const byKpi = new Map(submissions.map((s) => [s.kpiId, s]));
-  const result: EmployeeMonthScore = {
-    employeeId,
-    totalWeight: defs.reduce((s, d) => s + d.weight, 0),
-    validatedScore: 0,
-    projectedScore: 0,
-    kpiCount: defs.length,
-    validatedCount: 0,
-    submittedCount: 0,
-    rejectedCount: 0,
-  };
-
-  for (const def of defs) {
-    const sub = byKpi.get(def.id);
-    if (!sub) continue;
-    if (sub.status === 'Validated') {
-      const v = def.weight * cappedFraction(sub.validatedScore ?? sub.claimedScore);
-      result.validatedScore += v;
-      result.projectedScore += v;
-      result.validatedCount++;
-    } else if (sub.status === 'Submitted') {
-      result.projectedScore += def.weight * cappedFraction(sub.claimedScore);
-      result.submittedCount++;
-    } else if (sub.status === 'Rejected') {
-      result.rejectedCount++;
-    }
-  }
-  return result;
-}
-
-export function categoryForScore(score: number): string {
-  if (score >= 1) return 'Sangat baik';
-  if (score >= 0.85) return 'Baik';
-  if (score >= 0.7) return 'Cukup';
+export function categoryForScorePct(pct: number): string {
+  if (pct >= 100) return 'Sangat baik';
+  if (pct >= 85) return 'Baik';
+  if (pct >= 70) return 'Cukup';
   return 'Perlu perbaikan';
 }
 
@@ -68,6 +22,13 @@ export function isValidEvidenceUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+export function parseScore(raw: string): number | null {
+  if (raw.trim() === '') return null;
+  const n = Number(raw.replace(',', '.'));
+  if (!Number.isFinite(n) || n < 0 || n > SCORE_CAP_PCT) return null;
+  return n;
 }
 
 export function downloadCsv(filename: string, rows: (string | number)[][]): void {

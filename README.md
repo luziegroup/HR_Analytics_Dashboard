@@ -38,13 +38,14 @@ src/
 
 ## Isi KPI Mandiri & Validasi Leader
 
-Model: **skor akhir per KPI + file KPI pendukung**. Karyawan memilih nama, bulan, lalu mengisi satu angka
-*Skor akhir (%)* per KPI dan **link file KPI pendukung** (wajib). Leader membuka file, lalu **Setujui**,
-**koreksi skor** (alasan wajib), atau **Kembalikan** (alasan wajib). Nilai resmi hanya dari KPI berstatus *Tervalidasi*:
-`jumlah (bobot x min(skor, 120%))`. Leader bisa mengunduh rekap dan detail dalam CSV.
+Model: **satu nilai final per orang per bulan + file KPI rinci sebagai pengecek**. Karyawan memilih nama dan bulan,
+mengisi *Nilai final (%)* gabungan semua KPI, dan melampirkan **link file KPI rinci** (wajib). Leader membuka file itu,
+mencocokkannya dengan daftar KPI dan bobot, lalu **Setujui**, **koreksi nilai** (alasan wajib), atau **Kembalikan**
+(alasan wajib). Nilai resmi hanya dari kiriman berstatus *Tervalidasi* (maksimum 120%). Rekap bisa diunduh sebagai CSV.
 
 Tahap sekarang memakai penyimpanan **localStorage** (`src/services/submissionStore.ts`) dan pilihan nama sebagai
 pengganti login, jadi hanya untuk menyempurnakan sistem. Data belum dibagikan antar perangkat. Firebase hanya dipakai
 konektor Google Drive dan dibiarkan kosong (`firebase-applet-config.json`).
 
-Definisi KPI, bobot, dan arti "terlaksana sempurna" ada di `src/config/kpiDefinitions.ts`; tim dan leader di `src/config/team.ts`.
+Daftar KPI, bobot, dan apa yang dicek di file ada di `src/config/kpiDefinitions.ts` (rujukan saja, bukan isian);
+tim dan leader di `src/config/team.ts`.

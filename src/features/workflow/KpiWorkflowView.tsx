@@ -50,7 +50,7 @@ export function KpiWorkflowView({ mode }: { mode: 'input' | 'validation' }) {
     );
   } else if (mode === 'input') {
     body = wf.member ? (
-      <MyKpiInputView member={wf.member} monthKey={monthKey} submissions={wf.submissions} onSave={wf.save} />
+      <MyKpiInputView member={wf.member} monthKey={monthKey} submission={wf.submissions[0]} onSave={wf.save} />
     ) : (
       <SectionCard title="Input KPI Saya">
         <p className="text-sm text-slate-600">Leader tidak punya KPI sendiri. Buka menu Validasi Leader.</p>
