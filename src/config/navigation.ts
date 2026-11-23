@@ -2,6 +2,8 @@ import type { ComponentType } from 'react';
 import {
   CalendarClock,
   CheckSquare,
+  ClipboardCheck,
+  FilePenLine,
   Grid3x3,
   LineChart,
   Target,
@@ -18,6 +20,20 @@ export interface NavItemConfig {
 }
 
 export const NAV_ITEMS: NavItemConfig[] = [
+  {
+    id: 'selfinput',
+    label: 'Input KPI Saya',
+    description: 'Isi target, jumlah tercapai, dan link bukti KPI bulanan, lalu kirim ke leader.',
+    icon: FilePenLine,
+    showGlobalFilters: false,
+  },
+  {
+    id: 'validation',
+    label: 'Validasi Leader',
+    description: 'Leader memeriksa bukti, menyetujui atau mengembalikan KPI, dan melihat rekap nilai.',
+    icon: ClipboardCheck,
+    showGlobalFilters: false,
+  },
   {
     id: 'overview',
     label: 'Ringkasan Kinerja',

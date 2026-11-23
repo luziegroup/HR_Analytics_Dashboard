@@ -1,0 +1,47 @@
+rules_version = '2';
+
+// Salin daftar email yang sama dengan src/config/team.ts, lalu publikasikan di
+// Firebase Console > Firestore Database > Rules.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+    function me() { return request.auth.token.email.lower(); }
+    function isLeader() {
+      return signedIn() && me() in ['leader@contoh.com'];
+    }
+    function isMember() {
+      return signedIn() && me() in [
+        'adhit@contoh.com', 'fathur@contoh.com', 'amud@contoh.com', 'agus@contoh.com'
+      ];
+    }
+
+    match /submissions/{id} {
+      allow read: if isLeader() || (isMember() && resource.data.ownerEmail == me());
+
+      // Karyawan membuat draf atau langsung mengirim KPI miliknya sendiri.
+      allow create: if isMember()
+        && request.resource.data.ownerEmail == me()
+        && request.resource.data.status in ['Draft', 'Submitted'];
+
+      // Karyawan hanya boleh mengubah KPI miliknya yang masih Draf atau Dikembalikan.
+      allow update: if (isMember()
+          && resource.data.ownerEmail == me()
+          && request.resource.data.ownerEmail == resource.data.ownerEmail
+          && resource.data.status in ['Draft', 'Rejected']
+          && request.resource.data.status in ['Draft', 'Submitted'])
+        // Leader hanya memutuskan kiriman orang lain dan tidak boleh mengubah angka.
+        || (isLeader()
+          && resource.data.ownerEmail != me()
+          && resource.data.status == 'Submitted'
+          && request.resource.data.status in ['Validated', 'Rejected']
+          && request.resource.data.target == resource.data.target
+          && request.resource.data.actual == resource.data.actual
+          && request.resource.data.evidenceUrl == resource.data.evidenceUrl);
+
+      allow delete: if false;
+    }
+  }
+}

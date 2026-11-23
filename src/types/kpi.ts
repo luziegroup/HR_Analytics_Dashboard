@@ -12,7 +12,9 @@ export type KpiView =
   | 'matrix'
   | 'calibration'
   | 'reports'
-  | 'import';
+  | 'import'
+  | 'selfinput'
+  | 'validation';
 
 export interface KpiMetric {
   id: string;

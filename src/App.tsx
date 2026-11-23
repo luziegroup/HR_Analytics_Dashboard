@@ -9,6 +9,7 @@ import { ImportKpiView } from '@/features/import/ImportKpiView';
 import { PerformanceMatrixView } from '@/features/matrix/PerformanceMatrixView';
 import { PerformanceOverviewView } from '@/features/overview/PerformanceOverviewView';
 import { MonthlyReportsView } from '@/features/reports/MonthlyReportsView';
+import { KpiWorkflowView } from '@/features/workflow/KpiWorkflowView';
 import { KpiScorecardView } from '@/features/scorecard/KpiScorecardView';
 import { useKpiDashboard } from '@/hooks/useKpiDashboard';
 import { useMonthlyReports } from '@/hooks/useMonthlyReports';
@@ -149,6 +150,8 @@ export function App() {
         )}
 
         <main className="flex-1 p-4 sm:p-8 max-w-[1440px] w-full mx-auto">
+          {activeView === 'selfinput' && <KpiWorkflowView mode="input" />}
+          {activeView === 'validation' && <KpiWorkflowView mode="validation" />}
           {activeView === 'overview' && (
             <PerformanceOverviewView
               scores={employeeScores}

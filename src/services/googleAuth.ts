@@ -12,6 +12,7 @@ export const SCOPES = ['https://www.googleapis.com/auth/drive.readonly'] as cons
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+export { app, auth };
 
 const provider = new GoogleAuthProvider();
 for (const scope of SCOPES) {
@@ -71,3 +72,12 @@ export const logout = async (): Promise<void> => {
   await auth.signOut();
   cachedAccessToken = null;
 };
+
+// Login dasar (tanpa akses Drive) untuk fitur isi KPI mandiri dan validasi leader.
+const basicProvider = new GoogleAuthProvider();
+export const signInBasic = async (): Promise<User> => {
+  const result = await signInWithPopup(auth, basicProvider);
+  return result.user;
+};
+export const subscribeAuthUser = (callback: (user: User | null) => void) =>
+  onAuthStateChanged(auth, callback);
